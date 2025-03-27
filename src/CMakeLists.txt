@@ -1,8 +1,10 @@
-#获取当前目录下的所有源文件
-file(GLOB SRC_FILES ${CMAKE_CURRENT_SOURCE_DIR}/*.cc)
+cmake_minimum_required(VERSION 3.10)
+project(my_muduo)
 
-#创建静态库或共享库
-add_library(muduo_core SHARED ${SRC_FILES})
+set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 
-#设置头文件的路径
-target_include_directories(muduo_core PUBLIC ${CMAKE_SOURCE_DIR}/include)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -std=c++11")
+
+aux_source_directory(. SRC_LIST)
+
+add_library(my_muduo SHARED ${SRC_LIST})
