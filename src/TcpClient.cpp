@@ -125,5 +125,5 @@ void TcpClient::removeConnection(const TcpConnectionPtr& conn)
 
 bool TcpClient::retry() const
 {
-    
+    return true;
 }

@@ -1,4 +1,6 @@
 #pragma once
+#include "Logger.h"
+
 #include <vector>
 #include <unordered_map>
 #include <string>
@@ -22,7 +24,8 @@ public:
      * @param hashFunc 可选的自定义哈希函数，默认为 std::hash。
      */
     ConsistentHash(size_t numReplicas, std::function<size_t(const std::string&)> hashFunc = std::hash<std::string>())
-        : numReplicas_(numReplicas), hashFunction_(hashFunc) {}
+        : numReplicas_(numReplicas)
+        , hashFunction_(hashFunc) {}
 
     /**
      * @brief 向哈希环中添加一个节点。
@@ -32,13 +35,14 @@ public:
      *
      * @param node 要添加的节点名称（如服务器地址）。
      */
-    void addNode(const std::string& node) {
+    void addNode(const std::string& node,int index) {
         std::lock_guard<std::mutex> lock(mtx_); // 确保多线程安全
         for (size_t i = 0; i < numReplicas_; ++i) {
             // 为每个虚拟节点计算唯一哈希值
             size_t hash = hashFunction_(node +"_0"+std::to_string(i));
             circle_[hash] = node;         // 哈希值映射到节点
             sortedHashes_.push_back(hash); // 添加到排序列表
+            nodeNameToIndexMap_[node] = index; //虚拟->物理
         }
         // 对哈希值进行排序
         std::sort(sortedHashes_.begin(), sortedHashes_.end());
@@ -61,6 +65,7 @@ public:
             if (it != sortedHashes_.end()) {
                 sortedHashes_.erase(it); // 从排序列表中删除
             }
+            nodeNameToIndexMap_.erase(node);
         }
     }
 
@@ -75,19 +80,24 @@ public:
      * @throws std::runtime_error 如果哈希环为空（没有节点）。
      */
 
-    size_t getNode(const std::string& key) {
-    std::lock_guard<std::mutex> lock(mtx_); // 确保多线程安全
-    if (circle_.empty()) {
-        throw std::runtime_error("No nodes in consistent hash"); // 环为空时抛出异常
-    }
-    size_t hash = hashFunction_(key); // 计算键的哈希值
-    // 在已排序的哈希列表中找到第一个大于键哈希值的位置
-    auto it = std::upper_bound(sortedHashes_.begin(), sortedHashes_.end(), hash);
-    if (it == sortedHashes_.end()) {
-        // 如果超出环最大值，则回绕到第一个节点
-        it = sortedHashes_.begin();
-    }
-    return *it; // 返回对应的哈希值
+    int getNode(const std::string& key) {
+        std::lock_guard<std::mutex> lock(mtx_); // 确保多线程安全
+
+        if (circle_.empty()) {
+            throw std::runtime_error("No nodes in consistent hash"); // 环为空时抛出异常
+        }
+        size_t hash = hashFunction_(key); // 计算键的哈希值
+
+        // 在已排序的哈希列表中找到第一个大于键哈希值的位置
+        auto it = std::upper_bound(sortedHashes_.begin(), sortedHashes_.end(), hash);
+        if (it == sortedHashes_.end()) {
+            // 如果超出环最大值，则回绕到第一个节点
+            it = sortedHashes_.begin();
+        }
+        std::string nodeName = circle_[*it];
+        int nodeIndex = nodeNameToIndexMap_[nodeName];
+
+        return nodeIndex; // 返回对应的哈希值
     }
 
 private:
@@ -96,4 +106,5 @@ private:
     std::unordered_map<size_t, std::string> circle_; // 哈希值到节点名称的映射
     std::vector<size_t> sortedHashes_; // 排序的哈希值列表，用于高效查找
     std::mutex mtx_; // 保护哈希环的互斥锁，确保多线程安全
+    std::unordered_map<std::string, size_t> nodeNameToIndexMap_;
 };

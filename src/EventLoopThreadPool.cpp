@@ -21,10 +21,11 @@ void EventLoopThreadPool::start(const ThreadInitCallback &cb)
     {
         char buf[name_.size() + 32];
         snprintf(buf, sizeof buf, "%s%d", name_.c_str(), i);
-        EventLoopThread *t = new EventLoopThread(cb, buf);
+        std::string nodeName =  std::string(buf);
+        EventLoopThread *t = new EventLoopThread(cb, nodeName);
         threads_.push_back(std::unique_ptr<EventLoopThread>(t));
         loops_.push_back(t->startLoop()); // 底层创建线程 绑定一个新的EventLoop 并返回该loop的地址
-        hash_.addNode(buf);               // 将线程添加到一致哈希中。
+        hash_.addNode(nodeName,i);               // 将线程添加到一致哈希中。
     }
 
     if (numThreads_ == 0 && cb) // 整个服务端只有一个线程运行baseLoop
@@ -33,10 +34,10 @@ void EventLoopThreadPool::start(const ThreadInitCallback &cb)
     }
 }
 
-// 如果工作在多线程中，baseLoop_(mainLoop)会默认以轮询的方式分配Channel给subLoop
+// 如果工作在多线程中，baseLoop_(mainLoop)会默认以一致性Hash的方式分配Channel给subLoop
 EventLoop *EventLoopThreadPool::getNextLoop(const std::string &key)
 {
-    size_t index = hash_.getNode(key); // 获取索引
+    int index = hash_.getNode(key); // 获取索引
     if (index >= loops_.size())
     {
         // 处理错误，例如返回 baseLoop 或抛出异常
